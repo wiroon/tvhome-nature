@@ -436,4 +436,12 @@
          faint outer glow), rim (the crisp rim alone, no sheen, fill or glow, for a quiet focus over a wallpaper) or
          halo (the rim with a lighter outer glow). Can also be set with "glass_style": "rim" in a theme's config.json. -->
     <string name="glass_style" translatable="false">glass</string>
+
+    <!-- Weather strip under the clock (WeatherStrip; Open-Meteo, no key). To change the city, edit these five values:
+         latitude and longitude (decimal degrees), the name shown, an IANA time zone, and how many hours to show. -->
+    <string name="weather_lat" translatable="false">13.30</string>
+    <string name="weather_lon" translatable="false">100.91</string>
+    <string name="weather_place" translatable="false">Bang Saen</string>
+    <string name="weather_tz" translatable="false">Asia/Bangkok</string>
+    <string name="weather_hours" translatable="false">7</string>
 </resources>

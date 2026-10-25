@@ -94,6 +94,16 @@
             android:letterSpacing="0.12" />
     </LinearLayout>
 
+    <com.gathin.tvhome.WeatherStrip
+        android:id="@+id/weatherStrip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|left"
+        android:layout_marginStart="56dp"
+        android:layout_marginTop="164dp"
+        android:focusable="false"
+        android:importantForAccessibility="no" />
+
     <!-- Cinematic top shelf: darkens the edge behind the shelf and the lower half, so the text and the
          dock stay readable over the artwork. -->
     <View
@@ -183,11 +193,11 @@
                     android:singleLine="true"
                     android:ellipsize="end"
                     android:layout_marginStart="4dp"
-                    android:textColor="#8CFFFFFF"
-                    android:textSize="12sp"
-                    android:fontFamily="@string/font_medium"
-                    android:letterSpacing="0.22"
-                    android:textAllCaps="true" />
+                    android:textColor="#BFFFFFFF"
+                    android:textSize="20sp"
+                    android:fontFamily="@string/font_regular"
+                    android:letterSpacing="0"
+                    android:textAllCaps="false" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -201,10 +211,10 @@
                         android:layout_height="wrap_content"
                         android:format12Hour="h:mm"
                         android:format24Hour="HH:mm"
-                        android:textColor="#FFFFFFFF"
-                        android:textSize="52sp"
+                        android:textColor="#E8FFFFFF"
+                        android:textSize="68sp"
                         android:fontFamily="@string/font_light"
-                        android:letterSpacing="-0.04"
+                        android:letterSpacing="-0.02"
                         android:includeFontPadding="false" />
 
                     <TextClock
@@ -225,7 +235,7 @@
                     <View
                         android:id="@+id/clockDivider"
                         android:layout_width="1dp"
-                        android:layout_height="26dp"
+                        android:layout_height="52dp"
                         android:layout_gravity="bottom"
                         android:layout_marginStart="16dp"
                         android:layout_marginEnd="16dp"
@@ -266,11 +276,11 @@
                             android:ellipsize="end"
                             android:format12Hour="@string/date_format_home"
                             android:format24Hour="@string/date_format_home"
-                            android:textColor="#A6FFFFFF"
-                            android:textSize="14sp"
+                            android:textColor="#D9FFFFFF"
+                            android:textSize="26sp"
                             android:fontFamily="@string/font_regular"
-                            android:letterSpacing="0.14"
-                            android:textAllCaps="true" />
+                            android:letterSpacing="0"
+                            android:textAllCaps="false" />
 
                         <!-- Lunar date ("Lunar 13/9 · Year of the Horse"), shown when lunar_date is on. -->
                         <TextView
@@ -316,8 +326,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentEnd="true"
-                android:layout_alignBottom="@id/leftBlock"
-                android:layout_marginBottom="6dp"
+                android:layout_alignTop="@id/leftBlock"
+                android:layout_marginTop="2dp"
                 android:clipChildren="false"
                 android:clipToPadding="false"
                 android:orientation="horizontal">
@@ -393,4 +403,13 @@
         android:layout_height="10dp"
         android:alpha="0"
         android:importantForAccessibility="no" />
+
+    <!-- macOS-style Dock along the bottom. -->
+    <com.gathin.tvhome.MacDock
+        android:id="@+id/macDock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:nextFocusUp="@+id/btnSettings" />
+
 </FrameLayout>

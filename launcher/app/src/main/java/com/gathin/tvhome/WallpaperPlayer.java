@@ -35,8 +35,12 @@ final class WallpaperPlayer {
     private final ImageView image;
     private final int backgroundColor;
     private final List<File> files;
-    private final long interval;
-    private final String order;
+    private final List<File> allFiles;
+    private long interval;
+    private String order;
+    private final Context ctx;
+    private final int defMinutes;
+    private final String defOrder;
     private final SharedPreferences preferences;
     private final ExecutorService decoder = Executors.newSingleThreadExecutor();
     private final Random random = new Random();
@@ -66,18 +70,23 @@ final class WallpaperPlayer {
         this.root = root;
         backgroundColor = config.backgroundColor;
         files = new ArrayList<>(config.wallpapers);
+        allFiles = new ArrayList<>(config.wallpapers);
+        ctx = context;
+        defMinutes = config.wallpaperRotationMinutes;
+        defOrder = config.wallpaperOrder;
         interval = config.wallpaperRotationMinutes * 60_000L;
         bitmapConfig = config.wallpaperTrueColor ? Bitmap.Config.ARGB_8888 : Bitmap.Config.RGB_565;
         // The dim is painted into the picture (decode), so no full-screen shade layer is drawn on every frame.
         dimColor = config.wallpaperDim > 0 ? (config.wallpaperDim * 255 / 100) << 24 : 0;
         order = config.wallpaperOrder;
         preferences = context.getSharedPreferences("wallpaper_rotation", Context.MODE_PRIVATE);
+        applyPrefs();
         moods = config.wallpaperMoods;
         latitude = moods.isEmpty() ? "" : context.getString(R.string.latitude);
         longitude = moods.isEmpty() ? "" : context.getString(R.string.longitude);
         // Playback state belongs to one collection. Changing the collection starts from its first
         // picture instead of resuming a filename that belonged to the previous one.
-        String collection = collectionKey(files);
+        String collection = collectionKey(allFiles);
         if (!collection.equals(preferences.getString("collection", ""))) {
             preferences.edit().putString("collection", collection)
                     .remove("image").remove("changed").apply();
@@ -127,6 +136,47 @@ final class WallpaperPlayer {
             first = WallpaperRotation.pick(playable, previous, order, random);
         }
     }
+
+    /** The wallpaper manager's choices (BgManager): pictures ticked off, minutes between pictures, shuffle or in order. */
+    private void applyPrefs() {
+        Set<String> off = BgManager.disabled(ctx);
+        files.clear();
+        for (File f : allFiles) if (!off.contains(f.getName())) files.add(f);
+        if (files.isEmpty()) files.addAll(allFiles);
+        interval = BgManager.minutes(ctx, defMinutes) * 60_000L;
+        String o = BgManager.order(ctx, defOrder);
+        order = WallpaperRotation.validOrder(o) ? o : defOrder;
+    }
+
+    /** Re-read the choices and change picture now. */
+    void reload() {
+        applyPrefs();
+        preferences.edit().putLong("changed", 0).apply();
+        update();
+    }
+
+    /** Show one picture now (long press in the wallpaper manager). */
+    void showNow(String name) {
+        if (closed) return;
+        File f = WallpaperRotation.find(allFiles, name);
+        if (f == null) return;
+        decoder.execute(() -> {
+            Bitmap b = decode(f);
+            root.post(() -> {
+                if (closed || b == null) return;
+                show(b);
+                displayed = f.getName();
+                showCaption(true);
+                preferences.edit().putString("image", displayed).putLong("changed", System.currentTimeMillis()).apply();
+            });
+        });
+    }
+
+    String currentName() { return displayed; }
+
+    int defaultMinutes() { return defMinutes; }
+
+    String defaultOrder() { return defOrder; }
 
     void start() {
         active = true;
@@ -210,12 +260,12 @@ final class WallpaperPlayer {
     private static TextView makeCaption(Context context, FrameLayout root) {
         float dp = context.getResources().getDisplayMetrics().density;
         TextView text = new TextView(context);
-        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         text.setTextColor(0xD9FFFFFF);
         text.setShadowLayer(6 * dp, 0, dp, 0xCC000000);
         text.setSingleLine(true);
         text.setEllipsize(TextUtils.TruncateAt.END);
-        text.setMaxWidth(Math.round(520 * dp));
+        text.setMaxWidth(Math.round(420 * dp));
         text.setFocusable(false);
         text.setAlpha(0f);
         try {
@@ -224,9 +274,8 @@ final class WallpaperPlayer {
             // the system font is fine
         }
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
-        params.topMargin = Math.round(110 * dp);
-        params.setMarginEnd(Math.round(62 * dp));
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        params.topMargin = Math.round(30 * dp);
         root.addView(text, params);
         return text;
     }

@@ -21,7 +21,7 @@ final class ThemeFiles {
                     ? name : null;
         }
         if (segments.size() == 2 && WALLPAPERS.equals(segments.get(0))
-                && (collectionImage(segments.get(1)) || WallpaperCaptions.FILE_NAME.equals(segments.get(1)))) {
+                && (collectionImage(segments.get(1)) || WallpaperCaptions.FILE_NAME.equals(segments.get(1)) || BgManager.STAGED_FILE.equals(segments.get(1)))) {
             return WALLPAPERS + "/" + segments.get(1);
         }
         return null;

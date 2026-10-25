@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The place name shown on the weather strip when the TV is set to Thai. Change it with weather_lat / weather_lon in values/config.xml. -->
+<resources>
+    <string name="weather_place" translatable="false">บางแสน</string>
+</resources>

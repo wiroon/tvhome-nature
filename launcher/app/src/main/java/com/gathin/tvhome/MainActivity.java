@@ -764,8 +764,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                // Back to the dock tile Up came from, not wherever the focus finder lands.
-                focusTile(singleRow ? lastFocused : lastFocused % COLUMNS);
+                // Down from the top bar goes to the Dock.
+                macDock.requestFocus();
                 return true;
             }
             int firstButton = btnInputs.getVisibility() == View.VISIBLE ? R.id.btnInputs : firstTopButton().getId();
@@ -774,6 +774,32 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return v.getId() == leftButton;
             return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v.getId() == rightButton;
         };
+        // macOS-style Dock and all-apps overlay replace the tile grid on Home.
+        macDock = findViewById(R.id.macDock);
+        defaultDock = new java.util.ArrayList<>(cfg.dockApps);
+        macDock.setApps(savedDock());
+        launchpad = new Launchpad(this, () -> macDock.requestFocus());
+        ((ViewGroup) findViewById(R.id.root)).addView(launchpad,
+                new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        dockMenu = new DockMenu(this, () -> macDock.requestFocus());
+        ((ViewGroup) findViewById(R.id.root)).addView(dockMenu,
+                new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        bgManager = new BgManager(this, new BgManager.Host() {
+            @Override public void apply() { wallpaperPlayer.reload(); }
+            @Override public void preview(String name) { wallpaperPlayer.showNow(name); }
+            @Override public String current() { return wallpaperPlayer.currentName(); }
+            @Override public int defaultMinutes() { return wallpaperPlayer.defaultMinutes(); }
+            @Override public String defaultOrder() { return wallpaperPlayer.defaultOrder(); }
+        }, () -> macDock.requestFocus());
+        ((ViewGroup) findViewById(R.id.root)).addView(bgManager,
+                new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        macDock.setHost(new MacDock.Host() {
+            @Override public void onAllApps() { launchpad.open(hiddenApps); }
+            @Override public void onWallpaper() { bgManager.open(); }
+            @Override public void onDockMenu() { showDockMenu(); }
+        });
+        grid.setVisibility(View.GONE);
+        macDock.post(() -> macDock.requestFocus());
         btnInputs.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
@@ -929,6 +955,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return;
         }
         restartIdleClock();
+        if (macDock != null) macDock.postDelayed(() -> {
+            if (!launchpad.isOpen() && !bgManager.isOpen() && !dockMenu.isOpen() && openPopup == null && getCurrentFocus() == null) macDock.requestFocus();
+        }, 400);
         promptsPaused = false;
         if (grid.getAdapter() == null) grid.setAdapter(adapter);   // dropped by onTrimMemory
         switch (tileRefresh.onResume(packagesChangedSinceRebuild())) {
@@ -1559,6 +1588,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     public void onBackPressed() {
+        if (dockMenu != null && dockMenu.isOpen()) { dockMenu.close(); return; }
+        if (bgManager != null && bgManager.isOpen()) { bgManager.close(); return; }
+        if (launchpad != null && launchpad.isOpen()) { launchpad.close(); return; }
         // Home screen: Back goes nowhere.
     }
 
@@ -2670,6 +2702,56 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private ColorStateList wifiNoInternetTint, wifiOfflineTint;
     /** The app library button in the top bar (library_button). */
     private View btnLibraryTop;
+    private MacDock macDock;
+    private Launchpad launchpad;
+    private BgManager bgManager;
+    private DockMenu dockMenu;
+    private java.util.List<String> defaultDock = new java.util.ArrayList<>();
+
+    // ---- Dock editing: long press an app for move, remove, add --------------------------------------------
+
+    private java.util.List<String> savedDock() {
+        String s = getSharedPreferences("dock_edit", MODE_PRIVATE).getString("apps", null);
+        if (s == null) return defaultDock;
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String p : s.split("\n")) if (!p.isEmpty()) out.add(p);
+        return out;
+    }
+
+    private void saveDock(java.util.List<String> apps, String keep) {
+        getSharedPreferences("dock_edit", MODE_PRIVATE).edit().putString("apps", android.text.TextUtils.join("\n", apps)).apply();
+        macDock.setApps(apps);
+        macDock.select(keep);
+    }
+
+    private void showDockMenu() {
+        final java.util.List<String> apps = new java.util.ArrayList<>(macDock.packages());
+        final String pkg = macDock.selectedPackage();
+        if (pkg == null) return;
+        final int i = apps.indexOf(pkg);
+        Runnable left = i > 0 ? () -> { java.util.Collections.swap(apps, i, i - 1); saveDock(apps, pkg); showDockMenu(); } : null;
+        Runnable right = i < apps.size() - 1 ? () -> { java.util.Collections.swap(apps, i, i + 1); saveDock(apps, pkg); showDockMenu(); } : null;
+        Runnable remove = apps.size() > 1 ? () -> {
+            apps.remove(pkg);
+            saveDock(apps, apps.get(Math.min(i, apps.size() - 1)));
+            dockMenu.close();
+        } : null;
+        Runnable add = () -> {
+            dockMenu.close();
+            launchpad.openPicker(hiddenApps, picked -> {
+                if (!apps.contains(picked)) apps.add(picked);
+                saveDock(apps, picked);
+            });
+        };
+        Runnable reset = () -> {
+            getSharedPreferences("dock_edit", MODE_PRIVATE).edit().remove("apps").apply();
+            macDock.setApps(defaultDock);
+            dockMenu.close();
+        };
+        dockMenu.show(macDock.selectedLabel(),
+                new String[]{Tx.t("ย้ายไปทางซ้าย", "Move left"), Tx.t("ย้ายไปทางขวา", "Move right"), Tx.t("เอาออกจาก Dock", "Remove from the Dock"), Tx.t("เพิ่มแอปเข้า Dock...", "Add an app to the Dock..."), Tx.t("คืนค่าเริ่มต้น", "Reset to default"), Tx.t("ปิดเมนู", "Close menu")},
+                new Runnable[]{left, right, remove, add, reset, () -> dockMenu.close()});
+    }
     /** The open library came from that button: closing it returns there instead of scrolling to the grid's end. */
     private boolean libraryFromTopBar;
 
@@ -2678,10 +2760,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         pill.setContentDescription(pill.getText());
         pill.setText(null);
         pill.setMaxWidth(Integer.MAX_VALUE);
-        int pad = Math.round(10 * density);
+        // Round 54dp button; the 30dp icon is centred by equal side padding (12dp each side).
+        int pad = Math.round(12 * density);
         pill.setPaddingRelative(pad, 0, pad, 0);
         pill.setCompoundDrawablePadding(0);
-        pill.getLayoutParams().width = Math.round(42 * density);
+        pill.setGravity(android.view.Gravity.CENTER);
+        pill.getLayoutParams().width = Math.round(54 * density);
     }
 
     // ---- festive skin ------------------------------------------------------------------------------
