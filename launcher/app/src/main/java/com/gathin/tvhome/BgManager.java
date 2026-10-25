@@ -74,6 +74,9 @@ public class BgManager extends FrameLayout {
     /** Minutes between pictures: the saved choice, else {@code def}. 0 means never change. */
     static int minutes(Context c, int def) { return prefs(c).getInt("minutes", def); }
 
+    /** Chance in percent that the next item is a ticked clip instead of a still (shuffle order). */
+    static int videoPercent(Context c) { return prefs(c).getInt("video_percent", 35); }
+
     static String order(Context c, String def) { return prefs(c).getString("order", def); }
 
     // ---- screen ------------------------------------------------------------------------------------------------
@@ -88,6 +91,10 @@ public class BgManager extends FrameLayout {
     private final LinearLayout timerChips = new LinearLayout(getContext());
     private final LinearLayout orderChips = new LinearLayout(getContext());
     private final LinearLayout actionChips = new LinearLayout(getContext());
+    private final LinearLayout videoChips = new LinearLayout(getContext());
+    private static final int[] VIDEO_PCT = {0, 15, 35, 60};
+    private static final String[] VIDEO_LABEL = {Tx.t("ไม่ใช้", "Off"), Tx.t("น้อย", "Few"), Tx.t("ปานกลาง", "Some"), Tx.t("บ่อย", "Often")};
+    private int videoPct;
     private final GridLayout grid;
     private final TextView summary, footer;
     private int minutesChoice;
@@ -106,6 +113,7 @@ public class BgManager extends FrameLayout {
         medium = m;
         File dir = Config.dir(c) == null ? null : new File(Config.dir(c), "wallpapers");
         files.addAll(WallpaperRotation.images(dir));
+        files.addAll(VideoBackground.clips(c));
         names = WallpaperCaptions.read(dir);
         setBackgroundColor(0xFF0A0D13);
         setVisibility(GONE);
@@ -142,13 +150,22 @@ public class BgManager extends FrameLayout {
             paint();
         }));
 
+        // live background row
+        addAt(text(Tx.t("คลิปวิดีโอ", "Video clips"), 15, 0x99FFFFFF, regular), Gravity.TOP | Gravity.START, 48, 146, 0);
+        videoChips.setOrientation(LinearLayout.HORIZONTAL);
+        addAt(videoChips, Gravity.TOP | Gravity.START, 148, 138, 0);
+        for (int i = 0; i < VIDEO_PCT.length; i++) {
+            final int pct = VIDEO_PCT[i];
+            videoChips.addView(chip(VIDEO_LABEL[i], () -> { videoPct = pct; save(); paint(); }));
+        }
+
         ScrollView scroll = new ScrollView(c);
         scroll.setVerticalScrollBarEnabled(false);
         grid = new GridLayout(c);
         grid.setColumnCount(5);
         scroll.addView(grid, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LayoutParams sp = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        sp.topMargin = (int) (146 * dp);
+        sp.topMargin = (int) (190 * dp);
         sp.bottomMargin = (int) (34 * dp);
         sp.leftMargin = (int) (40 * dp);
         sp.rightMargin = (int) (40 * dp);
@@ -216,6 +233,7 @@ public class BgManager extends FrameLayout {
         styleChip((TextView) orderChips.getChildAt(0), WallpaperRotation.ORDER_SHUFFLE.equals(orderChoice));
         styleChip((TextView) orderChips.getChildAt(1), WallpaperRotation.ORDER_SEQUENTIAL.equals(orderChoice));
         for (int i = 0; i < actionChips.getChildCount(); i++) styleChip((TextView) actionChips.getChildAt(i), false);
+        for (int i = 0; i < videoChips.getChildCount(); i++) styleChip((TextView) videoChips.getChildAt(i), VIDEO_PCT[i] == videoPct);
         int on = files.size() - countOff();
         summary.setText(Tx.t("เลือก ", "Selected ") + on + Tx.t(" จาก ", " of ") + files.size() + Tx.t(" ภาพ", " pictures"));
     }
@@ -235,8 +253,18 @@ public class BgManager extends FrameLayout {
         Set<String> decided = new HashSet<>();
         for (File f : files) decided.add(f.getName());
         prefs(getContext()).edit().putStringSet("disabled", new HashSet<>(off)).putStringSet("decided", decided)
-                .putInt("minutes", minutesChoice).putString("order", orderChoice).apply();
+                .putInt("minutes", minutesChoice).putInt("video_percent", videoPct).putString("order", orderChoice).apply();
         dirty = true;
+    }
+
+    /** The pictures and clips on the TV now (they change when new ones are pushed). */
+    private void loadFiles() {
+        File dir = Config.dir(getContext()) == null ? null : new File(Config.dir(getContext()), "wallpapers");
+        files.clear();
+        files.addAll(WallpaperRotation.images(dir));
+        files.addAll(VideoBackground.clips(getContext()));
+        names.clear();
+        names.putAll(WallpaperCaptions.read(dir));
     }
 
     public boolean isOpen() { return getVisibility() == VISIBLE; }
@@ -248,6 +276,8 @@ public class BgManager extends FrameLayout {
         minutesChoice = minutes(c, host.defaultMinutes());
         orderChoice = order(c, host.defaultOrder());
         dirty = false;
+        videoPct = videoPercent(c);
+        loadFiles();
         buildCells();
         paint();
         setVisibility(VISIBLE);
@@ -304,7 +334,22 @@ public class BgManager extends FrameLayout {
             @Override public void getOutline(View v, android.graphics.Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), 12 * dp); }
         });
         box.addView(img, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        thumbs.execute(() -> {
+        final boolean clip = f.getName().toLowerCase().endsWith(".mp4");
+        if (clip) thumbs.execute(() -> {
+            Bitmap b = null;
+            android.media.MediaMetadataRetriever mr = new android.media.MediaMetadataRetriever();
+            try {
+                mr.setDataSource(f.getAbsolutePath());
+                b = mr.getFrameAtTime(2_000_000L, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                if (b != null) b = Bitmap.createScaledBitmap(b, 320, 180, true);
+            } catch (Exception ignored) {
+            } finally {
+                try { mr.release(); } catch (Exception ignored) { }
+            }
+            final Bitmap fb = b;
+            if (fb != null) img.post(() -> img.setImageBitmap(fb));
+        });
+        else thumbs.execute(() -> {
             BitmapFactory.Options o = new BitmapFactory.Options();
             o.inSampleSize = 6;
             o.inPreferredConfig = Bitmap.Config.RGB_565;
@@ -317,6 +362,14 @@ public class BgManager extends FrameLayout {
         shade.setTag("shade");
         box.addView(shade, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
+        if (clip) {
+            TextView play = text(Tx.t("\u25B6  วิดีโอ", "\u25B6  Video"), 12, 0xFFFFFFFF, medium);
+            play.setBackground(round(0x99000000, 8));
+            play.setPadding((int) (8 * dp), (int) (2 * dp), (int) (8 * dp), (int) (2 * dp));
+            FrameLayout.LayoutParams pl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
+            pl.setMargins((int) (6 * dp), 0, 0, (int) (6 * dp));
+            box.addView(play, pl);
+        }
         TextView tick = text("", 16, 0xFFFFFFFF, medium);
         tick.setGravity(Gravity.CENTER);
         tick.setTag("tick");
@@ -325,7 +378,12 @@ public class BgManager extends FrameLayout {
         box.addView(tick, tp);
 
         box.setOnClickListener(v -> toggle(f.getName()));
-        box.setOnLongClickListener(v -> { host.preview(f.getName()); return true; });
+        box.setOnLongClickListener(v -> {
+            // Apply the ticks first (that may pick a new item), then show this one so it is the one that stays.
+            if (dirty) { host.apply(); dirty = false; }
+            host.preview(f.getName());
+            return true;
+        });
         box.setOnFocusChangeListener((v, focused) -> {
             styleCell(box, f.getName());
             if (focused) {

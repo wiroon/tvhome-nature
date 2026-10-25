@@ -416,7 +416,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // black under it is a second full-screen fill on every frame for nothing. The starting window still uses
         // the theme's background, so launch looks the same.
         getWindow().setBackgroundDrawable(null);
-        wallpaperPlayer = new WallpaperPlayer(this, root, cfg);
+        videoBg = new VideoBackground(this, root);
+        wallpaperPlayer = new WallpaperPlayer(this, root, cfg, videoBg);
         sky = findViewById(R.id.sky);
         sky.setIntensity(cfg.skyIntensity);
         glass = findViewById(R.id.glass);
@@ -778,10 +779,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         macDock = findViewById(R.id.macDock);
         defaultDock = new java.util.ArrayList<>(cfg.dockApps);
         macDock.setApps(savedDock());
-        launchpad = new Launchpad(this, () -> macDock.requestFocus());
+        launchpad = new Launchpad(this, dockBack);
         ((ViewGroup) findViewById(R.id.root)).addView(launchpad,
                 new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        dockMenu = new DockMenu(this, () -> macDock.requestFocus());
+        dockMenu = new DockMenu(this, dockBack);
         ((ViewGroup) findViewById(R.id.root)).addView(dockMenu,
                 new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         bgManager = new BgManager(this, new BgManager.Host() {
@@ -790,12 +791,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             @Override public String current() { return wallpaperPlayer.currentName(); }
             @Override public int defaultMinutes() { return wallpaperPlayer.defaultMinutes(); }
             @Override public String defaultOrder() { return wallpaperPlayer.defaultOrder(); }
-        }, () -> macDock.requestFocus());
+        }, dockBack);
         ((ViewGroup) findViewById(R.id.root)).addView(bgManager,
                 new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         macDock.setHost(new MacDock.Host() {
-            @Override public void onAllApps() { launchpad.open(hiddenApps); }
-            @Override public void onWallpaper() { bgManager.open(); }
+            @Override public void onAllApps() { lockDock(); launchpad.open(hiddenApps); }
+            @Override public void onWallpaper() { lockDock(); bgManager.open(); }
             @Override public void onDockMenu() { showDockMenu(); }
         });
         grid.setVisibility(View.GONE);
@@ -990,6 +991,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (showStats) startStats();
         sky.update();
         wallpaperPlayer.start();
+        videoBg.start();
         handler.postDelayed(minuteTick, MINUTE_MS);
         if (festive && diya != null) {
             diya.start();
@@ -1146,6 +1148,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public void onUserInteraction() {
         super.onUserInteraction();
         restartIdleClock();
+        if (videoBg != null) videoBg.touch();
     }
 
     private void restartIdleClock() {
@@ -1159,6 +1162,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         root.removeCallbacks(showIdleClock);
         endReorder();   // Home or another app while reordering keeps the order so far
         wallpaperPlayer.stop();
+        videoBg.stop();
         stopAmbientAnimation();
         hero.animate().cancel();
         ambient.animate().cancel();
@@ -1220,6 +1224,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onDestroy();
         unregisterReceiver(packageReceiver);
         wallpaperPlayer.close();
+        videoBg.close();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) tim.unregisterCallback(inputCallback);
@@ -2703,8 +2708,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** The app library button in the top bar (library_button). */
     private View btnLibraryTop;
     private MacDock macDock;
+    /** Closing a page over the Dock hands focus back to it; while a page is open the Dock cannot take focus. */
+    private final Runnable dockBack = () -> { macDock.setFocusable(true); macDock.requestFocus(); };
+
+    private void lockDock() { macDock.setFocusable(false); }
     private Launchpad launchpad;
     private BgManager bgManager;
+    private VideoBackground videoBg;
     private DockMenu dockMenu;
     private java.util.List<String> defaultDock = new java.util.ArrayList<>();
 
@@ -2725,6 +2735,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     private void showDockMenu() {
+        lockDock();
         final java.util.List<String> apps = new java.util.ArrayList<>(macDock.packages());
         final String pkg = macDock.selectedPackage();
         if (pkg == null) return;
@@ -2738,6 +2749,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         } : null;
         Runnable add = () -> {
             dockMenu.close();
+            lockDock();
             launchpad.openPicker(hiddenApps, picked -> {
                 if (!apps.contains(picked)) apps.add(picked);
                 saveDock(apps, picked);

@@ -16,6 +16,7 @@ TV database and the other themes, use the original.
 | **Dock** | Icons along the bottom that grow as the selection passes (like the macOS Dock), with the name above. They sit at normal size until you press a key, then rest again after eight seconds. OK opens the app with a small bounce. |
 | **Edit the Dock** | Hold OK on an app: move left or right, remove it, add any installed app, or reset. Your order is kept. |
 | **Wallpapers** | The icon after your apps. Tick the pictures you want, choose how often Home changes picture (1 min to 1 hour, or never), shuffle or in order. Hold OK on a picture to show it now. Pictures you push but never ticked stay out of the rotation. |
+| **Video clips** | Put silent looping `.mp4` clips on the TV and they are mixed into the rotation with your pictures: tick them in Wallpapers like any picture, and choose how often one comes up (off, few, some, often). A clip plays for the time you set, then Home moves on. It stops and shows the last still when the TV is left alone for 30 minutes, and the decoder is released when you open another app. |
 | **Screensaver** | Replaces the TV's own: your ticked pictures, full screen, slow cross-fade and drift, the photographer's name and the time. Any key wakes the TV. |
 | **Weather strip** | Now plus the next seven hours under the clock, with hand-drawn icons. Data from Open-Meteo. |
 | **Fonts** | IBM Plex Sans Thai; Thai and English texts follow the TV's language. |
@@ -58,6 +59,8 @@ Then the pictures and the theme:
 tools/push-pictures.sh themes/nature-calm 192.168.1.50:5555
 ```
 
+Clips go in a `videos/` folder next to `config.json` (for example `themes/mine/videos/v01.mp4`, names of letters, digits, `_` and `-`); the same script pushes them. A caption for a clip goes in `wallpapers/captions.txt` like a picture's.
+
 The original project's guide (<https://github.com/Gathin23/cleanyourtv>) covers disabling the stock launcher and the other
 steps for making this the only Home. Do that before you disable anything: a TV with no launcher that answers Home is hard to recover.
 
@@ -95,6 +98,7 @@ Thai the name comes from `values-th/weather.xml`. Rebuild and reinstall.
 - The weather has not been tested with the internet down for long; it shows the last answer it saved, or "loading".
 - Dock editing keeps only apps that are installed; an app you uninstall disappears from the Dock.
 - Pictures beyond 100 are ignored (the original launcher's limit).
+- **No clips are included.** Free stock-video licences usually forbid redistributing the files, so none are committed. Use your own, or clips whose licence lets you pass them on. Best: 1920x1080, H.264, no audio, about 5 Mbps or less, 20 to 45 seconds, and a fixed camera (a moving camera is tiring behind the interface). Measured on the TCL above, one clip adds about 30 to 45 MB to the launcher's memory and about a quarter of one core, using the TV's hardware decoder.
 - Only the Thai and English texts of the new screens exist.
 
 ## Licence and credits

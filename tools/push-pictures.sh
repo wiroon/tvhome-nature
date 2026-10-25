@@ -28,5 +28,10 @@ put() {  # local file, name under files/
 adb shell "mkdir -p $DIR/wallpapers; rm -f $DIR/wallpapers/*" >/dev/null
 put "$THEME/config.json" config.json
 for f in "$THEME"/wallpapers/*; do put "$f" "wallpapers/$(basename "$f")"; done
+# Optional clips: videos/*.mp4 next to config.json.
+if compgen -G "$THEME/videos/*.mp4" >/dev/null; then
+  adb shell "mkdir -p $DIR/videos; rm -f $DIR/videos/*" >/dev/null
+  for f in "$THEME"/videos/*.mp4; do put "$f" "videos/$(basename "$f")"; done
+fi
 adb shell "rm -f /data/local/tmp/tvhome-stage; am force-stop $PKG; input keyevent KEYCODE_HOME"
 echo "Done."

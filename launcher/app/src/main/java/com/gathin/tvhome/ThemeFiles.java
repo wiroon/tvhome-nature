@@ -10,6 +10,8 @@ final class ThemeFiles {
     private static final Pattern IMAGE = Pattern.compile("[A-Za-z0-9_.-]+\\.(jpg|jpeg|png|webp)",
             Pattern.CASE_INSENSITIVE);
 
+    private static final Pattern VIDEO = Pattern.compile("[A-Za-z0-9_-]+\\.mp4");
+
     private ThemeFiles() {}
 
     /** The path relative to the theme directory, e.g. "config.json" or "wallpapers/dusk.jpg", or null if refused. */
@@ -23,6 +25,9 @@ final class ThemeFiles {
         if (segments.size() == 2 && WALLPAPERS.equals(segments.get(0))
                 && (collectionImage(segments.get(1)) || WallpaperCaptions.FILE_NAME.equals(segments.get(1)) || BgManager.STAGED_FILE.equals(segments.get(1)))) {
             return WALLPAPERS + "/" + segments.get(1);
+        }
+        if (segments.size() == 2 && "videos".equals(segments.get(0)) && VIDEO.matcher(segments.get(1)).matches()) {
+            return "videos/" + segments.get(1);
         }
         return null;
     }

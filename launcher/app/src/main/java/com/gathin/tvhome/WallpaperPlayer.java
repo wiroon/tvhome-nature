@@ -23,6 +23,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -39,6 +40,7 @@ final class WallpaperPlayer {
     private long interval;
     private String order;
     private final Context ctx;
+    private final VideoBackground video;
     private final int defMinutes;
     private final String defOrder;
     private final SharedPreferences preferences;
@@ -66,11 +68,13 @@ final class WallpaperPlayer {
     private LocalDate sunDay;
     private int[] sun;
 
-    WallpaperPlayer(Context context, FrameLayout root, Config config) {
+    WallpaperPlayer(Context context, FrameLayout root, Config config, VideoBackground video) {
         this.root = root;
+        this.video = video;
         backgroundColor = config.backgroundColor;
         files = new ArrayList<>(config.wallpapers);
         allFiles = new ArrayList<>(config.wallpapers);
+        allFiles.addAll(VideoBackground.clips(context));
         ctx = context;
         defMinutes = config.wallpaperRotationMinutes;
         defOrder = config.wallpaperOrder;
@@ -116,8 +120,17 @@ final class WallpaperPlayer {
         String previous = preferences.getString("image", "");
         List<File> playable = playable();
         File first = WallpaperRotation.find(playable, previous);
-        if (first == null) first = WallpaperRotation.pick(playable, previous, order, random);
+        if (first == null) first = choose(playable, previous);
         while (first != null) {
+            if (isClip(first)) {
+                displayed = first.getName();
+                video.show(first);
+                showCaption(false);
+                if (!displayed.equals(previous)) {
+                    preferences.edit().putString("image", displayed).putLong("changed", System.currentTimeMillis()).apply();
+                }
+                return;
+            }
             Bitmap bitmap = decode(first);
             if (bitmap != null) {
                 show(bitmap);
@@ -133,11 +146,32 @@ final class WallpaperPlayer {
             }
             files.remove(first);   // unreadable or over 4K: try another, or keep the plain colour
             playable = playable();
-            first = WallpaperRotation.pick(playable, previous, order, random);
+            first = choose(playable, previous);
         }
     }
 
     /** The wallpaper manager's choices (BgManager): pictures ticked off, minutes between pictures, shuffle or in order. */
+    private static boolean isClip(File f) { return f.getName().toLowerCase(Locale.ROOT).endsWith(".mp4"); }
+
+    /**
+     * The next item: in shuffle order a ticked clip comes up with the chance set in the wallpaper manager
+     * (video_percent), otherwise a still; in name order everything ticked takes its turn.
+     */
+    private File choose(List<File> playable, String previous) {
+        int pct = BgManager.videoPercent(ctx);
+        if (WallpaperRotation.ORDER_SEQUENTIAL.equals(order) || pct <= 0) {
+            List<File> stills = new ArrayList<>();
+            for (File f : playable) if (!isClip(f)) stills.add(f);
+            if (pct <= 0 && !stills.isEmpty()) return WallpaperRotation.pick(stills, previous, order, random);
+            return WallpaperRotation.pick(playable, previous, order, random);
+        }
+        List<File> clips = new ArrayList<>(), stills = new ArrayList<>();
+        for (File f : playable) (isClip(f) ? clips : stills).add(f);
+        if (clips.isEmpty() || stills.isEmpty()) return WallpaperRotation.pick(playable, previous, order, random);
+        return random.nextInt(100) < pct ? WallpaperRotation.pick(clips, previous, order, random)
+                                          : WallpaperRotation.pick(stills, previous, order, random);
+    }
+
     private void applyPrefs() {
         Set<String> off = BgManager.disabled(ctx);
         files.clear();
@@ -160,10 +194,18 @@ final class WallpaperPlayer {
         if (closed) return;
         File f = WallpaperRotation.find(allFiles, name);
         if (f == null) return;
+        if (isClip(f)) {
+            displayed = f.getName();
+            video.show(f);
+            showCaption(true);
+            preferences.edit().putString("image", displayed).putLong("changed", System.currentTimeMillis()).apply();
+            return;
+        }
         decoder.execute(() -> {
             Bitmap b = decode(f);
             root.post(() -> {
                 if (closed || b == null) return;
+                video.hide();
                 show(b);
                 displayed = f.getName();
                 showCaption(true);
@@ -223,10 +265,19 @@ final class WallpaperPlayer {
         File selected = WallpaperRotation.find(playable, previous);
         long changed = preferences.getLong("changed", 0);
         if (selected == null || WallpaperRotation.due(changed, System.currentTimeMillis(), interval)) {
-            selected = WallpaperRotation.pick(playable, previous, order, random);
+            selected = choose(playable, previous);
         }
         if (selected == null || selected.getName().equals(displayed)) return;
         File next = selected;
+        if (isClip(next)) {
+            displayed = next.getName();
+            video.show(next);
+            showCaption(true);
+            if (!displayed.equals(previous) || changed == 0) {
+                preferences.edit().putString("image", displayed).putLong("changed", System.currentTimeMillis()).apply();
+            }
+            return;
+        }
         loading = true;
         decoder.execute(() -> {
             Bitmap bitmap = decode(next);
@@ -242,6 +293,7 @@ final class WallpaperPlayer {
                     update();
                     return;
                 }
+                video.hide();
                 show(bitmap);
                 displayed = next.getName();
                 showCaption(true);
