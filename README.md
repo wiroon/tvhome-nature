@@ -59,6 +59,8 @@ Then the pictures and the theme:
 tools/push-pictures.sh themes/nature-calm 192.168.1.50:5555
 ```
 
+To make a clip from your own footage, `tools/make-loop.sh in.mov v01.mp4` scales it to 1920x1080, drops the audio and fades the end into the start so it loops without a jump (needs ffmpeg; tried on one clip).
+
 Clips go in a `videos/` folder next to `config.json` (for example `themes/mine/videos/v01.mp4`, names of letters, digits, `_` and `-`); the same script pushes them. A caption for a clip goes in `wallpapers/captions.txt` like a picture's.
 
 The original project's guide (<https://github.com/Gathin23/cleanyourtv>) covers disabling the stock launcher and the other
