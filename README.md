@@ -29,7 +29,8 @@ TV database and the other themes, use the original.
 
 One TV: **TCL Smart TV Pro (G08), Android 14 (Google TV), firmware UTT2.250416.001 AU02**. Nothing here was tried on another
 model. The D-pad flows were checked on that TV with injected keys; the real remote's buttons were not all re-tested after
-every change.
+every change. The YouTube, Netflix and Prime Video buttons were checked with the real remote (see
+[Remote app buttons](#remote-app-buttons-youtube-netflix-prime-video)).
 
 ## Differences from the original launcher (read this first)
 
@@ -77,6 +78,45 @@ TCL's firmware refuses to bind a screensaver service from an app that does not h
 `forbid bind service`); other makes may not need the second line. To go back to the TV's own:
 `adb shell settings put secure screensaver_components <the value you had>` (read it first with `settings get`).
 The screensaver starts after the TV's own idle time.
+
+### Remote app buttons (YouTube, Netflix, Prime Video)
+
+Once the stock launcher (`com.google.android.apps.tv.launcherx`) is disabled, the remote's app buttons may do nothing:
+on Google TV they were answered by the stock home. The launcher's `InputKeyService` (an accessibility service) can answer
+them again. Two steps:
+
+1. Map each button's keycode to an app with `app_keys` in your theme's `config.json`, then push the theme again:
+
+   ```json
+   "app_keys": [
+     "190:com.google.android.youtube.tv",
+     "4062:com.netflix.ninja",
+     "4099:com.amazon.amazonvideo.livingroom"
+   ]
+   ```
+
+2. Switch the service on. This command adds it and keeps any accessibility service you already have:
+
+   ```bash
+   adb shell 'appops set com.gathin.tvhome AUTO_START allow; s=$(settings get secure enabled_accessibility_services); case "$s" in null|"") settings put secure enabled_accessibility_services com.gathin.tvhome/.InputKeyService ;; *InputKeyService*) ;; *) settings put secure enabled_accessibility_services "$s:com.gathin.tvhome/.InputKeyService" ;; esac; settings put secure accessibility_enabled 1'
+   adb shell dumpsys accessibility | grep -A2 'Bound services'     # the service should be listed here
+   ```
+
+The keycodes above were read with the real remote on the TCL G08 below. **Your remote may differ, even on the same model:**
+on this TV the YouTube button sends 190 (`KEYCODE_BUTTON_3`), not the 4065 noted for another G08 in the original project.
+To find yours, clear the log, press the button a few times, and read the keycode:
+
+```bash
+adb logcat -c
+# press the button on the remote
+adb logcat -d | grep handleKeyBeforeQueueing
+```
+
+Keys injected with `adb shell input keyevent` never reach the service, so test with the real remote.
+
+**The trade-off:** on this TCL, while a key-filtering service is bound, holding a volume button changes the volume one step
+per press instead of ramping. To get the ramp back (and lose the app buttons), remove
+`com.gathin.tvhome/.InputKeyService` from `enabled_accessibility_services`.
 
 ## Change the city
 
